@@ -1,0 +1,13 @@
+module "spa_hosting" {
+  source      = "../../modules/s3-cloudfront-spa"
+  bucket_name = "flavorhive-qa"
+  env_name    = "QA"
+}
+
+output "qa_bucket" {
+  value = module.spa_hosting.bucket_name
+}
+
+output "qa_cloudfront_url" {
+  value = module.spa_hosting.cloudfront_domain
+}
