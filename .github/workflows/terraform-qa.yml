@@ -1,0 +1,102 @@
+# name: "FlavorHive Infra QA Deployment"
+
+# on:
+#   pull_request:
+#     branches:
+#       - main   # PRs into main trigger this workflow
+#     paths:
+#       - "envs/qa/**"  # only run if QA infra files are touched
+
+# jobs:
+#   terraform:
+#     name: "Terraform QA Plan"
+#     runs-on: ubuntu-latest
+
+#     env:
+#       TF_WORKING_DIR: envs/qa
+
+#     steps:
+#       # Step 1 - Checkout repo
+#       - name: Checkout
+#         uses: actions/checkout@v4
+
+#       # Step 2 - Setup Terraform
+#       - name: Setup Terraform
+#         uses: hashicorp/setup-terraform@v3
+#         with:
+#           terraform_version: 1.9.8 # pick version matching your local
+
+#       # Step 3 - Configure AWS creds (QA user)
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+
+#       # Step 4 - Init Terraform
+#       - name: Terraform Init
+#         working-directory: ${{ env.TF_WORKING_DIR }}
+#         run: terraform init
+
+#       # Step 5 - Terraform Validate
+#       - name: Terraform Validate
+#         working-directory: ${{ env.TF_WORKING_DIR }}
+#         run: terraform validate
+
+#       # Step 6 - Terraform Plan
+#       - name: Terraform Plan
+#         working-directory: ${{ env.TF_WORKING_DIR }}
+#         run: terraform plan -no-color
+
+#       # (Optional) Upload plan result to PR comments
+#       - name: Comment Plan on PR
+#         uses: marocchino/sticky-pull-request-comment@v2
+#         with:
+#           header: terraform-plan
+#           message: |
+#             ✅ Terraform Plan for QA:
+#             ```
+# #             ${{ steps.plan.outputs.stdout }}
+            # ```
+name: "FlavorHive Infra QA Deployment"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release/*       # Optional: PRs targeting release branches
+  workflow_dispatch:    # Optional manual trigger
+
+jobs:
+  terraform:
+    name: Terraform QA
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.7.0
+
+      - name: Terraform Init
+        run: terraform init -backend-config=backends/qa.hcl
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -var-file=environments/qa.tfvars -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
+        run: terraform apply -auto-approve tfplan
+
