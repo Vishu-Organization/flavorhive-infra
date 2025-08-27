@@ -1,0 +1,41 @@
+name: FlavorHive Infra Code Scanning
+
+on:
+  push:
+    branches: [main, integration, release/*]
+  pull_request:
+    branches: [main, integration, release/*]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  tfsec-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+            soft_fail: true
+            github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  checkov-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov and generate SARIF
+        run: checkov -d . --framework terraform --output sarif --soft-fail --output-file checkov.sarif
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+            sarif_file: checkov.sarif
