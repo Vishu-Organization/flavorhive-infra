@@ -1,0 +1,41 @@
+name: "FlavorHive Infra QA Deployment"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release/*       # Optional: PRs targeting release branches
+  workflow_dispatch:    # Optional manual trigger
+
+jobs:
+  terraform:
+    name: Terraform QA
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.7.0
+
+      - name: Terraform Init
+        run: terraform init -backend-config=backends/qa.hcl -reconfigure
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
+        run: terraform apply -auto-approve tfplan
+
