@@ -33,9 +33,9 @@ jobs:
         run: pip install checkov
 
       - name: Run Checkov and generate SARIF
-        run: checkov -d . --framework terraform --output sarif --soft-fail > checkov.sarif
+        run: checkov -d . --framework terraform --output sarif --soft-fail --output-file checkov.sarif
 
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
             sarif_file: checkov.sarif
