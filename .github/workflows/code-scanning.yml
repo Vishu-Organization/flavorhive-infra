@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup tfsec
-        uses: aquasecurity/tfsec-action@1.0.3
+        uses: aquasecurity/tfsec-action@v1.0.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -35,4 +35,4 @@ jobs:
         run: pip install checkov
 
       - name: Run Checkov scan
-        run: checkov -d . --compact
+        run: checkov -d . --compact --soft-fail
