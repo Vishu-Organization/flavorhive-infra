@@ -33,7 +33,7 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -var-file=environments/qa.tfvars -out=tfplan
+        run: terraform plan -out=tfplan
 
       - name: Terraform Apply
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
