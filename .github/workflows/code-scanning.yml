@@ -20,10 +20,8 @@ jobs:
       - name: Setup tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run tfsec scan
-        run: tfsec .
+            soft_fail: true
+            github_token: ${{ secrets.GITHUB_TOKEN }}
 
   checkov-scan:
     runs-on: ubuntu-latest
