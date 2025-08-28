@@ -13,3 +13,10 @@ variable "acm_certificate_arn" {
   type        = string
 }
 
+variable "kms_key_id" {
+  description = "KMS Key ID or ARN to use for default encryption of the SPA bucket"
+  type        = string
+  default     = ""  # empty means AWS-managed KMS key will be used
+}
+
+
