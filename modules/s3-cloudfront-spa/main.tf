@@ -1,3 +1,6 @@
+######################################
+# SPA Hosting S3 Bucket
+######################################
 resource "aws_s3_bucket" "spa" {
   bucket = var.bucket_name
 
@@ -11,7 +14,7 @@ resource "aws_s3_bucket" "spa" {
     rule {
       apply_server_side_encryption_by_default {
         sse_algorithm     = "aws:kms"
-        kms_master_key_id = var.kms_key_id  # optional: empty = AWS-managed KMS key
+        kms_master_key_id = var.kms_key_id
       }
     }
   }
@@ -21,12 +24,10 @@ resource "aws_s3_bucket" "spa" {
     id      = "expire-objects"
     enabled = true
 
-    # Optional: automatically delete objects after 365 days
     expiration {
       days = 365
     }
 
-    # Optional: clean up noncurrent versions
     noncurrent_version_expiration {
       days = 90
     }
@@ -41,27 +42,40 @@ resource "aws_s3_bucket_ownership_controls" "spa" {
 }
 
 resource "aws_s3_bucket_public_access_block" "spa" {
-  bucket = aws_s3_bucket.spa.id
+  bucket                  = aws_s3_bucket.spa.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
-# Bucket policy to allow CloudFront OAC to access the bucket
-resource "aws_s3_bucket_policy" "spa" {
+# ✅ Enforce HTTPS-only access
+resource "aws_s3_bucket_policy" "spa_enforce_ssl" {
   bucket = aws_s3_bucket.spa.id
 
   policy = jsonencode({
-    Version = "2012-10-17"
+    Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow"
+        Sid       = "EnforceSSL",
+        Effect    = "Deny",
+        Principal = "*",
+        Action    = "s3:*",
+        Resource = [
+          "${aws_s3_bucket.spa.arn}",
+          "${aws_s3_bucket.spa.arn}/*"
+        ],
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      },
+      {
+        Effect = "Allow",
         Principal = {
           Service = "cloudfront.amazonaws.com"
-        }
-        Action   = "s3:GetObject"
-        Resource = "${aws_s3_bucket.spa.arn}/*"
+        },
+        Action   = "s3:GetObject",
+        Resource = "${aws_s3_bucket.spa.arn}/*",
         Condition = {
           StringEquals = {
             "AWS:SourceArn" = aws_cloudfront_distribution.spa.arn
@@ -72,25 +86,33 @@ resource "aws_s3_bucket_policy" "spa" {
   })
 }
 
-
-# Logging bucket for CloudFront
+######################################
+# CloudFront Logging S3 Bucket
+######################################
 resource "aws_s3_bucket" "cloudfront_logs" {
   bucket = "${var.bucket_name}-cf-logs"
 
-  acl    = "log-delivery-write"
-
-  lifecycle_rule {
+  # ✅ Versioning
+  versioning {
     enabled = true
-    expiration {
-      days = 90 # keep logs for 90 days
-    }
   }
 
+  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
-        sse_algorithm = "AES256"
+        sse_algorithm     = "aws:kms"
+        kms_master_key_id = var.kms_key_id
       }
+    }
+  }
+
+  # ✅ Lifecycle for log cleanup
+  lifecycle_rule {
+    id      = "expire-logs"
+    enabled = true
+    expiration {
+      days = 90
     }
   }
 
@@ -99,8 +121,47 @@ resource "aws_s3_bucket" "cloudfront_logs" {
   })
 }
 
+resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
 
-# CloudFront OAC
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
+  bucket                  = aws_s3_bucket.cloudfront_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ✅ Enforce HTTPS-only access for log bucket
+resource "aws_s3_bucket_policy" "cloudfront_logs_enforce_ssl" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "EnforceSSL",
+        Effect    = "Deny",
+        Principal = "*",
+        Action    = "s3:*",
+        Resource = [
+          "${aws_s3_bucket.cloudfront_logs.arn}",
+          "${aws_s3_bucket.cloudfront_logs.arn}/*"
+        ],
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      }
+    ]
+  })
+}
+
+######################################
+# CloudFront Origin Access Control
+######################################
 resource "aws_cloudfront_origin_access_control" "spa" {
   name                              = "${var.bucket_name}-oac"
   description                       = "OAC for ${var.bucket_name}"
@@ -111,7 +172,6 @@ resource "aws_cloudfront_origin_access_control" "spa" {
 
 ######################################
 # CloudFront Response Headers Policy
-# ✅ New: CKV2_AWS_32
 ######################################
 resource "aws_cloudfront_response_headers_policy" "spa_security" {
   name = "${var.env_name}-security-headers"
@@ -148,10 +208,13 @@ resource "aws_cloudfront_response_headers_policy" "spa_security" {
   comment = "Security headers for ${var.env_name} SPA distribution"
 }
 
+######################################
+# CloudFront Distribution
+######################################
 resource "aws_cloudfront_distribution" "spa" {
   enabled             = true
   default_root_object = "index.html"
-  comment = "${var.env_name} - FlavorHive Distribution"
+  comment             = "${var.env_name} - FlavorHive Distribution"
 
   origin {
     domain_name              = aws_s3_bucket.spa.bucket_regional_domain_name
@@ -185,11 +248,11 @@ resource "aws_cloudfront_distribution" "spa" {
 
   viewer_certificate {
     acm_certificate_arn     = var.acm_certificate_arn
-    ssl_support_method       = "sni-only"
+    ssl_support_method      = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
 
-  # Enable access logging
+  # ✅ Enable access logging
   logging_config {
     bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
     include_cookies = false
@@ -197,14 +260,14 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 
   custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 }
