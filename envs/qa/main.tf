@@ -2,6 +2,8 @@ module "spa_hosting" {
   source      = "../../modules/s3-cloudfront-spa"
   bucket_name = "flavorhive-qa"
   env_name    = "QA"
+  enable_centralized_logging = false
+  log_retention_days         = 30 # shorter for non-prod
 }
 
 output "qa_bucket" {

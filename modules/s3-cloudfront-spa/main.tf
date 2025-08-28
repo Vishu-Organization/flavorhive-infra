@@ -87,6 +87,12 @@ resource "aws_cloudfront_distribution" "spa" {
     cloudfront_default_certificate = true
   }
 
+  logging_config {
+    bucket          = var.enable_centralized_logging ? var.centralized_log_bucket : aws_s3_bucket.cloudfront_logs[0].bucket_domain_name
+    prefix          = "${var.env_name}/"
+    include_cookies = false
+  }
+
   custom_error_response {
     error_code            = 403
     response_code         = 200
@@ -99,3 +105,31 @@ resource "aws_cloudfront_distribution" "spa" {
     response_page_path    = "/index.html"
   }
 }
+
+resource "aws_s3_bucket" "cloudfront_logs" {
+  count  = var.enable_centralized_logging ? 0 : 1
+  bucket = "${var.bucket_name}-${var.env_name}-cf-logs"
+
+  lifecycle_rule {
+    id      = "expire-logs"
+    enabled = true
+
+    expiration {
+      days = var.log_retention_days
+    }
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+
+  tags = {
+    Name        = "${var.bucket_name}-${var.env_name}-cf-logs"
+    Environment = var.env_name
+  }
+}
+
