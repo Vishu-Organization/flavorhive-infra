@@ -15,6 +15,22 @@ resource "aws_s3_bucket" "spa" {
       }
     }
   }
+
+  # ✅ Lifecycle configuration (CKV2_AWS_61)
+  lifecycle_rule {
+    id      = "expire-objects"
+    enabled = true
+
+    # Optional: automatically delete objects after 365 days
+    expiration {
+      days = 365
+    }
+
+    # Optional: clean up noncurrent versions
+    noncurrent_version_expiration {
+      days = 90
+    }
+  }
 }
 
 resource "aws_s3_bucket_ownership_controls" "spa" {
