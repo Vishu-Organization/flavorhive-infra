@@ -11,3 +11,7 @@ output "qa_bucket" {
 output "qa_cloudfront_url" {
   value = module.spa_hosting.cloudfront_domain
 }
+
+output "qa_cloudfront_log_bucket" {
+  value = module.spa_hosting.cloudfront_log_bucket
+}

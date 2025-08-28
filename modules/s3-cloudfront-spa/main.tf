@@ -73,6 +73,33 @@ resource "aws_s3_bucket_policy" "spa" {
 }
 
 
+# Logging bucket for CloudFront
+resource "aws_s3_bucket" "cloudfront_logs" {
+  bucket = "${var.bucket_name}-cf-logs"
+
+  acl    = "log-delivery-write"
+
+  lifecycle_rule {
+    enabled = true
+    expiration {
+      days = 90 # keep logs for 90 days
+    }
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+
+  tags = merge(var.tags, {
+    Purpose = "CloudFrontLogs"
+  })
+}
+
+
 # CloudFront OAC
 resource "aws_cloudfront_origin_access_control" "spa" {
   name                              = "${var.bucket_name}-oac"
@@ -160,6 +187,13 @@ resource "aws_cloudfront_distribution" "spa" {
     acm_certificate_arn     = var.acm_certificate_arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
+  }
+
+  # Enable access logging
+  logging_config {
+    bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
+    include_cookies = false
+    prefix          = "cloudfront-logs/"
   }
 
   custom_error_response {
