@@ -32,6 +32,11 @@ resource "aws_s3_bucket" "spa" {
       days = 90
     }
   }
+
+  logging {
+    target_bucket = aws_s3_bucket.cloudfront_logs.id
+    target_prefix = "spa-access-logs/"
+  }
 }
 
 resource "aws_s3_bucket_ownership_controls" "spa" {
