@@ -34,3 +34,7 @@ output "cloudfront_viewer_certificate_acm_arn" {
   description = "ACM certificate ARN used for CloudFront TLS v1.2"
   value       = var.acm_certificate_arn
 }
+
+output "cloudfront_log_bucket" {
+  value = aws_s3_bucket.cloudfront_logs.bucket
+}
