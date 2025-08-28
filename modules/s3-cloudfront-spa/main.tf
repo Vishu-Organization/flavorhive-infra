@@ -78,7 +78,8 @@ resource "aws_cloudfront_distribution" "spa" {
 
   restrictions {
     geo_restriction {
-      restriction_type = "none"
+      restriction_type = "whitelist"
+      locations        = ["US", "IN"]
     }
   }
 
