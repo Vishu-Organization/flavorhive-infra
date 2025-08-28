@@ -1,5 +1,36 @@
 resource "aws_s3_bucket" "spa" {
   bucket = var.bucket_name
+
+  # ✅ Enable versioning
+  versioning {
+    enabled = true
+  }
+
+  # ✅ Enable KMS encryption by default
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm     = "aws:kms"
+        kms_master_key_id = var.kms_key_id  # optional: empty = AWS-managed KMS key
+      }
+    }
+  }
+
+  # ✅ Lifecycle configuration (CKV2_AWS_61)
+  lifecycle_rule {
+    id      = "expire-objects"
+    enabled = true
+
+    # Optional: automatically delete objects after 365 days
+    expiration {
+      days = 365
+    }
+
+    # Optional: clean up noncurrent versions
+    noncurrent_version_expiration {
+      days = 90
+    }
+  }
 }
 
 resource "aws_s3_bucket_ownership_controls" "spa" {
@@ -51,6 +82,45 @@ resource "aws_cloudfront_origin_access_control" "spa" {
   signing_protocol                  = "sigv4"
 }
 
+######################################
+# CloudFront Response Headers Policy
+# ✅ New: CKV2_AWS_32
+######################################
+resource "aws_cloudfront_response_headers_policy" "spa_security" {
+  name = "${var.env_name}-security-headers"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 63072000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    xss_protection {
+      override           = true
+      mode_block         = true
+      protection_enabled = true
+    }
+
+    referrer_policy {
+      override = true
+      policy   = "strict-origin-when-cross-origin"
+    }
+
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+  }
+
+  comment = "Security headers for ${var.env_name} SPA distribution"
+}
+
 resource "aws_cloudfront_distribution" "spa" {
   enabled             = true
   default_root_object = "index.html"
@@ -84,7 +154,9 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn     = var.acm_certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 
   custom_error_response {

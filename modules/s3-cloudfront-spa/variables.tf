@@ -7,3 +7,16 @@ variable "env_name" {
   description = "Environment name (dev, qa, stage, prod)"
   type        = string
 }
+
+variable "acm_certificate_arn" {
+  description = "ARN of the ACM certificate for CloudFront distribution (must be in us-east-1)"
+  type        = string
+}
+
+variable "kms_key_id" {
+  description = "KMS Key ID or ARN to use for default encryption of the SPA bucket"
+  type        = string
+  default     = ""  # empty means AWS-managed KMS key will be used
+}
+
+
