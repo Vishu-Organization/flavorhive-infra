@@ -116,16 +116,15 @@ resource "aws_s3_bucket" "cloudfront_logs" {
     }
   }
 
+  # 🔹 Enable S3 access logging for this bucket itself
+  logging {
+    target_bucket = aws_s3_bucket.cloudfront_logs.id  # self-logging for QA/dev
+    target_prefix = "s3-access-logs/"
+  }
+
   tags = merge(var.tags, {
     Purpose = "CloudFrontLogs"
   })
-}
-
-resource "aws_s3_bucket_versioning" "cloudfront_logs_versioning" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-  versioning_configuration {
-    status = "Enabled"
-  }
 }
 
 resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
