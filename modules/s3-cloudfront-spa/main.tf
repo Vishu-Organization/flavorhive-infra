@@ -173,15 +173,17 @@ provider "aws" {
   region = var.replica_region  # new variable for replica
 }
 
-# Replica bucket
+# CloudFront Logging Replica Bucket
 resource "aws_s3_bucket" "cloudfront_logs_replica" {
   provider = aws.replica
   bucket   = "${var.bucket_name}-cf-logs-replica"
 
+  # ✅ Versioning
   versioning {
     enabled = true
   }
 
+  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
@@ -191,11 +193,59 @@ resource "aws_s3_bucket" "cloudfront_logs_replica" {
     }
   }
 
+  # ✅ Lifecycle for log cleanup
   lifecycle_rule {
     id      = "expire-logs"
     enabled = true
-    expiration { days = 90 }
+    expiration {
+      days = 90
+    }
   }
+}
+
+# ✅ Ownership controls
+resource "aws_s3_bucket_ownership_controls" "cloudfront_logs_replica" {
+  provider = aws.replica
+  bucket   = aws_s3_bucket.cloudfront_logs_replica.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+# ✅ Public access block
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs_replica" {
+  provider = aws.replica
+  bucket                  = aws_s3_bucket.cloudfront_logs_replica.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ✅ Enforce HTTPS-only access
+resource "aws_s3_bucket_policy" "cloudfront_logs_replica_enforce_ssl" {
+  provider = aws.replica
+  bucket   = aws_s3_bucket.cloudfront_logs_replica.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "EnforceSSL",
+        Effect    = "Deny",
+        Principal = "*",
+        Action    = "s3:*",
+        Resource = [
+          "${aws_s3_bucket.cloudfront_logs_replica.arn}",
+          "${aws_s3_bucket.cloudfront_logs_replica.arn}/*"
+        ],
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      }
+    ]
+  })
 }
 
 # IAM role for replication
