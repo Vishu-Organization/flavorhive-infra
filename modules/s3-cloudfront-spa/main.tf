@@ -121,6 +121,13 @@ resource "aws_s3_bucket" "cloudfront_logs" {
   })
 }
 
+resource "aws_s3_bucket_versioning" "cloudfront_logs_versioning" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
   bucket = aws_s3_bucket.cloudfront_logs.id
   rule {
