@@ -1,6 +1,11 @@
 resource "aws_s3_bucket" "spa" {
   bucket = var.bucket_name
 
+  # ✅ Enable versioning
+  versioning {
+    enabled = true
+  }
+
   # ✅ Enable KMS encryption by default
   server_side_encryption_configuration {
     rule {
