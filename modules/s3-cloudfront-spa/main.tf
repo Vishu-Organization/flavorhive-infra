@@ -157,8 +157,13 @@ resource "aws_s3_bucket" "cloudfront_logs_replica" {
       days = 90
     }
   }
+}
 
-  # ✅ Public access block
+# ✅ Public access block for replica bucket
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs_replica" {
+  provider = aws.replica
+  bucket   = aws_s3_bucket.cloudfront_logs_replica.id
+
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
