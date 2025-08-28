@@ -4,12 +4,12 @@
 resource "aws_s3_bucket" "spa" {
   bucket = var.bucket_name
 
-  # ✅ Enable versioning
+  # ✅ Versioning
   versioning {
     enabled = true
   }
 
-  # ✅ Enable KMS encryption by default
+  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
@@ -68,19 +68,6 @@ resource "aws_s3_bucket_policy" "spa_enforce_ssl" {
         Condition = {
           Bool = { "aws:SecureTransport" = "false" }
         }
-      },
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudfront.amazonaws.com"
-        },
-        Action   = "s3:GetObject",
-        Resource = "${aws_s3_bucket.spa.arn}/*",
-        Condition = {
-          StringEquals = {
-            "AWS:SourceArn" = aws_cloudfront_distribution.spa.arn
-          }
-        }
       }
     ]
   })
@@ -116,9 +103,9 @@ resource "aws_s3_bucket" "cloudfront_logs" {
     }
   }
 
-  # ✅ Enable S3 access logging for itself
+  # ✅ Enable S3 access logging for this bucket itself
   logging {
-    target_bucket = aws_s3_bucket.cloudfront_logs.bucket
+    target_bucket = aws_s3_bucket.cloudfront_logs.id
     target_prefix = "s3-access-logs/"
   }
 
@@ -142,38 +129,7 @@ resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
   restrict_public_buckets = true
 }
 
-# ✅ Enforce HTTPS-only access for log bucket
-resource "aws_s3_bucket_policy" "cloudfront_logs_enforce_ssl" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Sid       = "EnforceSSL",
-        Effect    = "Deny",
-        Principal = "*",
-        Action    = "s3:*",
-        Resource = [
-          "${aws_s3_bucket.cloudfront_logs.arn}",
-          "${aws_s3_bucket.cloudfront_logs.arn}/*"
-        ],
-        Condition = {
-          Bool = { "aws:SecureTransport" = "false" }
-        }
-      }
-    ]
-  })
-}
-
-######################################
-# 🔹 Cross-Region Replication (CloudFront Logs)
-######################################
-provider "aws" {
-  alias  = "replica"
-  region = var.replica_region  # new variable for replica
-}
-
-# CloudFront Logging Replica Bucket
+# ✅ Replica bucket for cross-region replication
 resource "aws_s3_bucket" "cloudfront_logs_replica" {
   provider = aws.replica
   bucket   = "${var.bucket_name}-cf-logs-replica"
@@ -193,7 +149,7 @@ resource "aws_s3_bucket" "cloudfront_logs_replica" {
     }
   }
 
-  # ✅ Lifecycle for log cleanup
+  # ✅ Lifecycle
   lifecycle_rule {
     id      = "expire-logs"
     enabled = true
@@ -201,102 +157,61 @@ resource "aws_s3_bucket" "cloudfront_logs_replica" {
       days = 90
     }
   }
-}
 
-# ✅ Ownership controls
-resource "aws_s3_bucket_ownership_controls" "cloudfront_logs_replica" {
-  provider = aws.replica
-  bucket   = aws_s3_bucket.cloudfront_logs_replica.id
-
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-# ✅ Public access block
-resource "aws_s3_bucket_public_access_block" "cloudfront_logs_replica" {
-  provider = aws.replica
-  bucket                  = aws_s3_bucket.cloudfront_logs_replica.id
+  # ✅ Public access block
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
-# ✅ Enforce HTTPS-only access
-resource "aws_s3_bucket_policy" "cloudfront_logs_replica_enforce_ssl" {
-  provider = aws.replica
-  bucket   = aws_s3_bucket.cloudfront_logs_replica.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Sid       = "EnforceSSL",
-        Effect    = "Deny",
-        Principal = "*",
-        Action    = "s3:*",
-        Resource = [
-          "${aws_s3_bucket.cloudfront_logs_replica.arn}",
-          "${aws_s3_bucket.cloudfront_logs_replica.arn}/*"
-        ],
-        Condition = {
-          Bool = { "aws:SecureTransport" = "false" }
-        }
-      }
-    ]
-  })
-}
-
-# IAM role for replication
-resource "aws_iam_role" "cloudfront_logs_replication_role" {
-  name = "cloudfront-logs-replication-role"
+######################################
+# IAM Role and Policy for Replication
+######################################
+resource "aws_iam_role" "cloudfront_logs_replication" {
+  name = "${var.bucket_name}-logs-replication-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = { Service = "s3.amazonaws.com" },
-        Action    = "sts:AssumeRole"
-      }
-    ]
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "s3.amazonaws.com" }
+    }]
   })
 }
 
-# Policy for replication role
 resource "aws_iam_role_policy" "cloudfront_logs_replication_policy" {
-  role = aws_iam_role.cloudfront_logs_replication_role.id
+  role = aws_iam_role.cloudfront_logs_replication.id
 
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
         Effect   = "Allow",
-        Action   = [
-          "s3:GetObjectVersion",
-          "s3:GetObjectVersionAcl",
-          "s3:GetObjectVersionTagging"
-        ],
+        Action   = ["s3:GetReplicationConfiguration", "s3:ListBucket"],
+        Resource = aws_s3_bucket.cloudfront_logs.arn
+      },
+      {
+        Effect   = "Allow",
+        Action   = ["s3:GetObjectVersionForReplication","s3:GetObjectVersionAcl","s3:GetObjectVersionTagging"],
         Resource = "${aws_s3_bucket.cloudfront_logs.arn}/*"
       },
       {
         Effect   = "Allow",
-        Action   = [
-          "s3:ReplicateObject",
-          "s3:ReplicateDelete",
-          "s3:ReplicateTags"
-        ],
+        Action   = ["s3:ReplicateObject","s3:ReplicateDelete","s3:ReplicateTags"],
         Resource = "${aws_s3_bucket.cloudfront_logs_replica.arn}/*"
       }
     ]
   })
 }
 
-# Replication configuration
+######################################
+# Cross-Region Replication Configuration
+######################################
 resource "aws_s3_bucket_replication_configuration" "cloudfront_logs" {
   bucket = aws_s3_bucket.cloudfront_logs.id
-  role   = aws_iam_role.cloudfront_logs_replication_role.arn
+  role   = aws_iam_role.cloudfront_logs_replication.arn
 
   rules {
     id     = "replicate-to-secondary-region"
@@ -307,7 +222,7 @@ resource "aws_s3_bucket_replication_configuration" "cloudfront_logs" {
       storage_class = "STANDARD"
     }
 
-    filter {} # replicate all objects
+    filter { prefix = "" }
   }
 }
 
@@ -375,16 +290,17 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   default_cache_behavior {
-    target_origin_id           = "s3-${var.bucket_name}"
-    viewer_protocol_policy     = "redirect-to-https"
-    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
-    cached_methods             = ["GET", "HEAD"]
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
+    target_origin_id       = "s3-${var.bucket_name}"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
 
     forwarded_values {
       query_string = false
       cookies { forward = "none" }
     }
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
   }
 
   restrictions {
@@ -395,12 +311,11 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   viewer_certificate {
-    acm_certificate_arn     = var.acm_certificate_arn
-    ssl_support_method      = "sni-only"
+    acm_certificate_arn      = var.acm_certificate_arn
+    ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
 
-  # ✅ Enable access logging
   logging_config {
     bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
     include_cookies = false
