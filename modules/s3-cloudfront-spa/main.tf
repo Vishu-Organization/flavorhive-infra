@@ -78,6 +78,7 @@ resource "aws_cloudfront_response_headers_policy" "spa_security" {
       access_control_max_age_sec = 63072000
       include_subdomains         = true
       preload                    = true
+      override                   = true
     }
 
     content_type_options {
