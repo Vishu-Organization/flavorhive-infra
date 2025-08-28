@@ -66,6 +66,85 @@ resource "aws_cloudfront_origin_access_control" "spa" {
   signing_protocol                  = "sigv4"
 }
 
+######################################
+# CloudFront Response Headers Policy
+# ✅ New: CKV2_AWS_32
+######################################
+resource "aws_cloudfront_response_headers_policy" "spa_security" {
+  name = "${var.env_name}-security-headers"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 63072000
+      include_subdomains         = true
+      preload                    = true
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    xss_protection {
+      override           = true
+      mode_block         = true
+      protection_enabled = true
+    }
+
+    referrer_policy {
+      override = true
+      policy   = "strict-origin-when-cross-origin"
+    }
+
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+  }
+
+  comment = "Security headers for ${var.env_name} SPA distribution"
+}
+
+######################################
+# WAFv2 WebACL
+# ✅ New: CKV2_AWS_47
+######################################
+resource "aws_wafv2_web_acl" "spa" {
+  name        = "${var.env_name}-cloudfront-waf"
+  description = "WAF for CloudFront SPA distribution"
+  scope       = "CLOUDFRONT"  # mandatory for CloudFront
+  default_action {
+    allow {}
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.env_name}-waf"
+    sampled_requests_enabled   = true
+  }
+
+  rule {
+    name     = "AWS-Log4j-Protection"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesJavaRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "log4j_protection"
+      sampled_requests_enabled   = true
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "spa" {
   enabled             = true
   default_root_object = "index.html"
@@ -103,6 +182,9 @@ resource "aws_cloudfront_distribution" "spa" {
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
+
+  # ✅ WAFv2 attachment (CKV2_AWS_47)
+  web_acl_id = aws_wafv2_web_acl.spa.arn
 
   custom_error_response {
     error_code            = 403
