@@ -8,22 +8,34 @@ variable "env_name" {
   type        = string
 }
 
+# -----------------------------
+# CloudFront logging
+# -----------------------------
 variable "enable_centralized_logging" {
-  description = "Whether to use a centralized logging bucket (enterprise standard)"
+  description = "Whether to use a centralized CloudFront log bucket (enterprise setup)"
   type        = bool
   default     = false
 }
 
 variable "centralized_log_bucket" {
-  description = "S3 bucket domain name for centralized logging (must be set if enable_centralized_logging = true)"
+  description = "Name of the centralized log bucket (used if enable_centralized_logging is true)"
   type        = string
-  default     = null
+  default     = ""
 }
 
 variable "log_retention_days" {
-  description = "Number of days to retain CloudFront access logs (only applies if centralized logging is disabled)"
+  description = "Number of days to retain CloudFront access logs (applies only if centralized logging is disabled)"
   type        = number
   default     = 90
+}
+
+# -----------------------------
+# S3 event notifications
+# -----------------------------
+variable "enable_s3_notifications" {
+  description = "Whether to enable S3 bucket notifications (Checkov CKV2_AWS_62 compliance)"
+  type        = bool
+  default     = true
 }
 
 

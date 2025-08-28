@@ -21,3 +21,8 @@ output "spa_bucket_notifications_enabled" {
   value       = true
 }
 
+output "spa_sns_topic_arn" {
+  description = "ARN of the SNS topic receiving S3 bucket notifications"
+  value       = aws_sns_topic.spa_events.arn
+}
+

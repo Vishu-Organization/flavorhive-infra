@@ -41,10 +41,18 @@ resource "aws_s3_bucket_policy" "spa" {
   })
 }
 
-# Minimal fix: S3 Event Notifications to EventBridge (Checkov CKV2_AWS_62)
+# ✅ Minimal Checkov-compatible fix: S3 Event Notifications via SNS
+resource "aws_sns_topic" "spa_events" {
+  name = "${var.bucket_name}-events"
+}
+
 resource "aws_s3_bucket_notification" "spa_notifications" {
-  bucket      = aws_s3_bucket.spa.id
-  eventbridge = true
+  bucket = aws_s3_bucket.spa.id
+
+  topic {
+    topic_arn = aws_sns_topic.spa_events.arn
+    events    = ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
+  }
 }
 
 # CloudFront OAC
