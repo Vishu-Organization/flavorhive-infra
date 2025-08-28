@@ -19,4 +19,14 @@ variable "kms_key_id" {
   default     = ""  # empty means AWS-managed KMS key will be used
 }
 
+variable "replica_region" {
+  description = "Region to replicate S3 CloudFront logs for cross-region replication"
+  type        = string
+  default     = "us-west-2" # You can change this as per your requirements
+}
 
+variable "tags" {
+  description = "Tags to attach to all S3 buckets and resources"
+  type        = map(string)
+  default     = {}
+}

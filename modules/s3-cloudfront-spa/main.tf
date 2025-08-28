@@ -19,7 +19,7 @@ resource "aws_s3_bucket" "spa" {
     }
   }
 
-  # ✅ Lifecycle configuration (CKV2_AWS_61)
+  # ✅ Lifecycle configuration
   lifecycle_rule {
     id      = "expire-objects"
     enabled = true
@@ -31,11 +31,6 @@ resource "aws_s3_bucket" "spa" {
     noncurrent_version_expiration {
       days = 90
     }
-  }
-
-  logging {
-    target_bucket = aws_s3_bucket.cloudfront_logs.id
-    target_prefix = "spa-access-logs/"
   }
 }
 
@@ -121,9 +116,9 @@ resource "aws_s3_bucket" "cloudfront_logs" {
     }
   }
 
-  # 🔹 Enable S3 access logging for this bucket itself
+  # ✅ Enable S3 access logging for itself
   logging {
-    target_bucket = aws_s3_bucket.cloudfront_logs.id  # self-logging for QA/dev
+    target_bucket = aws_s3_bucket.cloudfront_logs.bucket
     target_prefix = "s3-access-logs/"
   }
 
@@ -168,6 +163,102 @@ resource "aws_s3_bucket_policy" "cloudfront_logs_enforce_ssl" {
       }
     ]
   })
+}
+
+######################################
+# 🔹 Cross-Region Replication (CloudFront Logs)
+######################################
+provider "aws" {
+  alias  = "replica"
+  region = var.replica_region  # new variable for replica
+}
+
+# Replica bucket
+resource "aws_s3_bucket" "cloudfront_logs_replica" {
+  provider = aws.replica
+  bucket   = "${var.bucket_name}-cf-logs-replica"
+
+  versioning {
+    enabled = true
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm     = "aws:kms"
+        kms_master_key_id = var.kms_key_id
+      }
+    }
+  }
+
+  lifecycle_rule {
+    id      = "expire-logs"
+    enabled = true
+    expiration { days = 90 }
+  }
+}
+
+# IAM role for replication
+resource "aws_iam_role" "cloudfront_logs_replication_role" {
+  name = "cloudfront-logs-replication-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = { Service = "s3.amazonaws.com" },
+        Action    = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# Policy for replication role
+resource "aws_iam_role_policy" "cloudfront_logs_replication_policy" {
+  role = aws_iam_role.cloudfront_logs_replication_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect   = "Allow",
+        Action   = [
+          "s3:GetObjectVersion",
+          "s3:GetObjectVersionAcl",
+          "s3:GetObjectVersionTagging"
+        ],
+        Resource = "${aws_s3_bucket.cloudfront_logs.arn}/*"
+      },
+      {
+        Effect   = "Allow",
+        Action   = [
+          "s3:ReplicateObject",
+          "s3:ReplicateDelete",
+          "s3:ReplicateTags"
+        ],
+        Resource = "${aws_s3_bucket.cloudfront_logs_replica.arn}/*"
+      }
+    ]
+  })
+}
+
+# Replication configuration
+resource "aws_s3_bucket_replication_configuration" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  role   = aws_iam_role.cloudfront_logs_replication_role.arn
+
+  rules {
+    id     = "replicate-to-secondary-region"
+    status = "Enabled"
+
+    destination {
+      bucket        = aws_s3_bucket.cloudfront_logs_replica.arn
+      storage_class = "STANDARD"
+    }
+
+    filter {} # replicate all objects
+  }
 }
 
 ######################################
@@ -234,20 +325,16 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-${var.bucket_name}"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
+    target_origin_id           = "s3-${var.bucket_name}"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
 
     forwarded_values {
       query_string = false
-      cookies {
-        forward = "none"
-      }
+      cookies { forward = "none" }
     }
-
-    # ✅ Attach response headers policy here
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
   }
 
   restrictions {

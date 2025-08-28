@@ -1,4 +1,4 @@
-# SPA bucket
+# SPA S3 bucket
 output "bucket_name" {
   description = "Name of the SPA S3 bucket"
   value       = aws_s3_bucket.spa.bucket
@@ -35,6 +35,14 @@ output "cloudfront_viewer_certificate_acm_arn" {
   value       = var.acm_certificate_arn
 }
 
+# CloudFront logs bucket
 output "cloudfront_log_bucket" {
-  value = aws_s3_bucket.cloudfront_logs.bucket
+  description = "S3 bucket storing CloudFront logs"
+  value       = aws_s3_bucket.cloudfront_logs.bucket
+}
+
+# CloudFront logs replication bucket (cross-region)
+output "cloudfront_log_replica_bucket" {
+  description = "Cross-region replication destination bucket for CloudFront logs"
+  value       = aws_s3_bucket.cloudfront_logs_replica.bucket
 }
