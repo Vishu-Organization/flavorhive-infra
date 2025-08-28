@@ -1,15 +1,25 @@
 ######################################
+# Providers
+######################################
+provider "aws" {
+  region = var.primary_region
+}
+
+provider "aws" {
+  alias  = "replica"
+  region = var.replica_region
+}
+
+######################################
 # SPA Hosting S3 Bucket
 ######################################
 resource "aws_s3_bucket" "spa" {
   bucket = var.bucket_name
 
-  # ✅ Versioning
   versioning {
     enabled = true
   }
 
-  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
@@ -19,58 +29,127 @@ resource "aws_s3_bucket" "spa" {
     }
   }
 
-  # ✅ Lifecycle configuration
   lifecycle_rule {
     id      = "expire-objects"
     enabled = true
-
     expiration {
       days = 365
     }
-
     noncurrent_version_expiration {
       days = 90
     }
   }
-}
 
-resource "aws_s3_bucket_ownership_controls" "spa" {
-  bucket = aws_s3_bucket.spa.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+
+  logging {
+    target_bucket = aws_s3_bucket.spa.id
+    target_prefix = "s3-access-logs/"
   }
+
+  tags = merge(var.tags, {
+    Purpose = "SPA"
+  })
 }
 
-resource "aws_s3_bucket_public_access_block" "spa" {
-  bucket                  = aws_s3_bucket.spa.id
+# SPA replica bucket
+resource "aws_s3_bucket" "spa_replica" {
+  provider = aws.replica
+  bucket   = "${var.bucket_name}-replica"
+
+  versioning {
+    enabled = true
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm     = "aws:kms"
+        kms_master_key_id = var.kms_key_id
+      }
+    }
+  }
+
+  lifecycle_rule {
+    id      = "expire-objects"
+    enabled = true
+    expiration {
+      days = 365
+    }
+    noncurrent_version_expiration {
+      days = 90
+    }
+  }
+
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
-# ✅ Enforce HTTPS-only access
-resource "aws_s3_bucket_policy" "spa_enforce_ssl" {
-  bucket = aws_s3_bucket.spa.id
+# IAM role for SPA replication
+resource "aws_iam_role" "spa_replication" {
+  name = "${var.bucket_name}-replication-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "s3.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
 
+resource "aws_iam_role_policy" "spa_replication_policy" {
+  role = aws_iam_role.spa_replication.id
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Sid       = "EnforceSSL",
-        Effect    = "Deny",
-        Principal = "*",
-        Action    = "s3:*",
-        Resource = [
-          "${aws_s3_bucket.spa.arn}",
-          "${aws_s3_bucket.spa.arn}/*"
+        Effect   = "Allow",
+        Action   = [
+          "s3:GetObjectVersion",
+          "s3:GetObjectVersionAcl",
+          "s3:GetObjectVersionForReplication",
+          "s3:GetObjectLegalHold",
+          "s3:GetObjectVersionTagging",
+          "s3:GetObjectRetention"
         ],
-        Condition = {
-          Bool = { "aws:SecureTransport" = "false" }
-        }
+        Resource = "${aws_s3_bucket.spa.arn}/*"
+      },
+      {
+        Effect   = "Allow",
+        Action   = [
+          "s3:ReplicateObject",
+          "s3:ReplicateDelete",
+          "s3:ReplicateTags"
+        ],
+        Resource = "${aws_s3_bucket.spa_replica.arn}/*"
       }
     ]
   })
+}
+
+# SPA replication configuration
+resource "aws_s3_bucket_replication_configuration" "spa" {
+  bucket = aws_s3_bucket.spa.id
+  role   = aws_iam_role.spa_replication.arn
+
+  rules {
+    id       = "replicate-to-replica"
+    status   = "Enabled"
+    priority = 1
+    destination {
+      bucket        = aws_s3_bucket.spa_replica.arn
+      storage_class = "STANDARD"
+    }
+    filter {
+      prefix = ""
+    }
+  }
 }
 
 ######################################
@@ -79,12 +158,10 @@ resource "aws_s3_bucket_policy" "spa_enforce_ssl" {
 resource "aws_s3_bucket" "cloudfront_logs" {
   bucket = "${var.bucket_name}-cf-logs"
 
-  # ✅ Versioning
   versioning {
     enabled = true
   }
 
-  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
@@ -94,18 +171,19 @@ resource "aws_s3_bucket" "cloudfront_logs" {
     }
   }
 
-  # ✅ Lifecycle for log cleanup
   lifecycle_rule {
     id      = "expire-logs"
     enabled = true
-    expiration {
-      days = 90
-    }
+    expiration { days = 90 }
   }
 
-  # ✅ Enable S3 access logging for this bucket itself
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+
   logging {
-    target_bucket = aws_s3_bucket.cloudfront_logs.id
+    target_bucket = aws_s3_bucket.cloudfront_logs.bucket
     target_prefix = "s3-access-logs/"
   }
 
@@ -114,32 +192,15 @@ resource "aws_s3_bucket" "cloudfront_logs" {
   })
 }
 
-resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
-  bucket                  = aws_s3_bucket.cloudfront_logs.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# ✅ Replica bucket for cross-region replication
+# CloudFront logs replica bucket
 resource "aws_s3_bucket" "cloudfront_logs_replica" {
   provider = aws.replica
   bucket   = "${var.bucket_name}-cf-logs-replica"
 
-  # ✅ Versioning
   versioning {
     enabled = true
   }
 
-  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
@@ -149,20 +210,11 @@ resource "aws_s3_bucket" "cloudfront_logs_replica" {
     }
   }
 
-  # ✅ Lifecycle
   lifecycle_rule {
     id      = "expire-logs"
     enabled = true
-    expiration {
-      days = 90
-    }
+    expiration { days = 90 }
   }
-}
-
-# ✅ Public access block for replica bucket
-resource "aws_s3_bucket_public_access_block" "cloudfront_logs_replica" {
-  provider = aws.replica
-  bucket   = aws_s3_bucket.cloudfront_logs_replica.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -170,64 +222,66 @@ resource "aws_s3_bucket_public_access_block" "cloudfront_logs_replica" {
   restrict_public_buckets = true
 }
 
-######################################
-# IAM Role and Policy for Replication
-######################################
+# IAM role for CloudFront logs replication
 resource "aws_iam_role" "cloudfront_logs_replication" {
   name = "${var.bucket_name}-logs-replication-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "s3.amazonaws.com" },
       Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "s3.amazonaws.com" }
     }]
   })
 }
 
 resource "aws_iam_role_policy" "cloudfront_logs_replication_policy" {
   role = aws_iam_role.cloudfront_logs_replication.id
-
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
         Effect   = "Allow",
-        Action   = ["s3:GetReplicationConfiguration", "s3:ListBucket"],
-        Resource = aws_s3_bucket.cloudfront_logs.arn
-      },
-      {
-        Effect   = "Allow",
-        Action   = ["s3:GetObjectVersionForReplication","s3:GetObjectVersionAcl","s3:GetObjectVersionTagging"],
+        Action   = [
+          "s3:GetObjectVersion",
+          "s3:GetObjectVersionAcl",
+          "s3:GetObjectVersionForReplication",
+          "s3:GetObjectLegalHold",
+          "s3:GetObjectVersionTagging",
+          "s3:GetObjectRetention"
+        ],
         Resource = "${aws_s3_bucket.cloudfront_logs.arn}/*"
       },
       {
         Effect   = "Allow",
-        Action   = ["s3:ReplicateObject","s3:ReplicateDelete","s3:ReplicateTags"],
+        Action   = [
+          "s3:ReplicateObject",
+          "s3:ReplicateDelete",
+          "s3:ReplicateTags"
+        ],
         Resource = "${aws_s3_bucket.cloudfront_logs_replica.arn}/*"
       }
     ]
   })
 }
 
-######################################
-# Cross-Region Replication Configuration
-######################################
+# CloudFront logs replication configuration
 resource "aws_s3_bucket_replication_configuration" "cloudfront_logs" {
   bucket = aws_s3_bucket.cloudfront_logs.id
   role   = aws_iam_role.cloudfront_logs_replication.arn
 
   rules {
-    id     = "replicate-to-secondary-region"
-    status = "Enabled"
-
+    id       = "replicate-to-replica"
+    status   = "Enabled"
+    priority = 1
     destination {
       bucket        = aws_s3_bucket.cloudfront_logs_replica.arn
       storage_class = "STANDARD"
     }
-
-    filter { prefix = "" }
+    filter {
+      prefix = ""
+    }
   }
 }
 
@@ -295,17 +349,16 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-${var.bucket_name}"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
+    target_origin_id           = "s3-${var.bucket_name}"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
 
     forwarded_values {
       query_string = false
       cookies { forward = "none" }
     }
-
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
   }
 
   restrictions {
@@ -317,8 +370,8 @@ resource "aws_cloudfront_distribution" "spa" {
 
   viewer_certificate {
     acm_certificate_arn      = var.acm_certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    ssl_support_method        = "sni-only"
+    minimum_protocol_version  = "TLSv1.2_2021"
   }
 
   logging_config {
