@@ -144,6 +144,9 @@ resource "aws_cloudfront_distribution" "spa" {
         forward = "none"
       }
     }
+
+    # ✅ Attach response headers policy here
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
   }
 
   restrictions {
