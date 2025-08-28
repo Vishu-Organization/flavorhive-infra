@@ -133,3 +133,8 @@ resource "aws_s3_bucket" "cloudfront_logs" {
   }
 }
 
+resource "aws_s3_bucket_notification" "spa_notifications" {
+  bucket = aws_s3_bucket.spa.id
+  eventbridge = true
+}
+
