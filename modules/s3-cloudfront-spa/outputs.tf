@@ -16,3 +16,8 @@ output "cf_log_retention_days" {
   value       = var.enable_centralized_logging ? null : var.log_retention_days
 }
 
+output "spa_bucket_notifications_enabled" {
+  description = "Indicates that S3 bucket notifications are enabled for the SPA bucket"
+  value       = true
+}
+
