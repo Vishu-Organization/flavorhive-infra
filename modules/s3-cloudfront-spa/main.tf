@@ -104,47 +104,6 @@ resource "aws_cloudfront_response_headers_policy" "spa_security" {
   comment = "Security headers for ${var.env_name} SPA distribution"
 }
 
-######################################
-# WAFv2 WebACL
-# ✅ New: CKV2_AWS_47
-######################################
-resource "aws_wafv2_web_acl" "spa" {
-  name        = "${var.env_name}-cloudfront-waf"
-  description = "WAF for CloudFront SPA distribution"
-  scope       = "CLOUDFRONT"  # mandatory for CloudFront
-  default_action {
-    allow {}
-  }
-
-  visibility_config {
-    cloudwatch_metrics_enabled = true
-    metric_name                = "${var.env_name}-waf"
-    sampled_requests_enabled   = true
-  }
-
-  rule {
-    name     = "AWS-Log4j-Protection"
-    priority = 1
-
-    override_action {
-      none {}
-    }
-
-    statement {
-      managed_rule_group_statement {
-        name        = "AWSManagedRulesJavaRuleSet"
-        vendor_name = "AWS"
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "log4j_protection"
-      sampled_requests_enabled   = true
-    }
-  }
-}
-
 resource "aws_cloudfront_distribution" "spa" {
   enabled             = true
   default_root_object = "index.html"
@@ -182,9 +141,6 @@ resource "aws_cloudfront_distribution" "spa" {
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
-
-  # ✅ WAFv2 attachment (CKV2_AWS_47)
-  web_acl_id = aws_wafv2_web_acl.spa.arn
 
   custom_error_response {
     error_code            = 403
