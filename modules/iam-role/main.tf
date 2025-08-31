@@ -14,7 +14,10 @@ resource "aws_iam_role" "this" {
           StringLike = {
             # Allow any ref coming from the repo (PR refs included); trust is limited by repo URL.
             "token.actions.githubusercontent.com:sub" = var.github_sub
-          }
+          },
+          StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
         }
       }
     ]
