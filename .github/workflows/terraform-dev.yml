@@ -22,6 +22,27 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v3
 
+      # 🔹 Debug OIDC token (optional, can be removed after verification)
+      - name: Request OIDC ID Token
+        id: idtoken
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const token = await github.actions.getOIDCToken({
+              audience: "sts.amazonaws.com"
+            });
+            console.log(token);
+            return token;
+
+      - name: Debug GitHub OIDC token
+        run: |
+          TOKEN=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            -H "Accept: application/json" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}?audience=sts.amazonaws.com")
+          echo "OIDC token: $TOKEN"
+     
+
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
