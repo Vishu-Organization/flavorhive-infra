@@ -41,8 +41,8 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan
+        run: terraform plan -out=tfplan -var "dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}"
 
       - name: Terraform Apply
         if: (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -var "dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}" -auto-approve tfplan

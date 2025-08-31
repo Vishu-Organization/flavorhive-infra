@@ -5,9 +5,9 @@ module "github_oidc_role" {
   source    = "../../modules/iam-roles/github-oidc-role"
   role_name = "FlavorHive-QA-Deploy-Role"
 
-  github_sub     = "repo:<YOUR_GITHUB_ORG>/<YOUR_REPO>:ref:refs/heads/release/*"
+  github_sub     = "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/release/*"
   policy_arn     = "arn:aws:iam::aws:policy/AdministratorAccess" # or custom infra policy
-  github_oidc_arn = "arn:aws:iam::<QA_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+  github_oidc_arn = "arn:aws:iam::${var.qa_account_id}:oidc-provider/token.actions.githubusercontent.com"
 }
 
 ######################################
