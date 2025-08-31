@@ -1,7 +1,21 @@
+# Pull global shared resources (ACM, KMS) from global stack
+data "terraform_remote_state" "global" {
+  backend = "s3"
+  config = {
+    bucket = "flavorhive-infra-terraform-state-global"
+    key    = "global/terraform.tfstate"
+    region = "ap-south-1"
+  }
+}
+
 module "spa_hosting" {
   source      = "../../modules/s3-cloudfront-spa"
   bucket_name = "flavorhive-qa"
   env_name    = "QA"
+
+  # Use global resources
+  acm_certificate_arn = data.terraform_remote_state.global.outputs.acm_certificate_arn
+  kms_key_id          = data.terraform_remote_state.global.outputs.kms_key_id
 }
 
 output "qa_bucket" {

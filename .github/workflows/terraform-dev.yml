@@ -1,14 +1,14 @@
-name: "FlavorHive Infra QA Deployment"
+name: "FlavorHive Infra Dev Deployment"
 
 on:
   pull_request:
     branches:
-      - release/*    # PRs targeting release branches trigger QA deployment
+      - main
   workflow_dispatch:   # Allows manual trigger from Actions tab
 
 jobs:
   terraform:
-    name: Terraform QA
+    name: Terraform Dev
     runs-on: ubuntu-latest
 
     permissions:
@@ -25,9 +25,9 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.QA_ACCOUNT_ID }}:role/FlavorHive-QA-Deploy-Role
+          role-to-assume: arn:aws:iam::${{ secrets.DEV_ACCOUNT_ID }}:role/FlavorHive-Dev-Deploy-Role
           aws-region: ${{ secrets.AWS_REGION }}
-          role-session-name: github-actions-qa
+          role-session-name: github-actions-dev
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -35,7 +35,7 @@ jobs:
           terraform_version: 1.7.0
 
       - name: Terraform Init
-        run: terraform init -backend-config=backends/qa.hcl -reconfigure
+        run: terraform init -backend-config=backends/dev.hcl -reconfigure
 
       - name: Terraform Validate
         run: terraform validate
@@ -44,5 +44,5 @@ jobs:
         run: terraform plan -out=tfplan
 
       - name: Terraform Apply
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         run: terraform apply -auto-approve tfplan
