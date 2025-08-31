@@ -6,7 +6,10 @@ module "github_oidc_role" {
   role_name = "FlavorHive-Dev-Deploy-Role"
 
   # GitHub repository URL in the "sub" claim
-  github_sub = ["repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main"]
+  github_sub = [
+    "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main",
+    "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
+    ]
   policy_arn     = "arn:aws:iam::aws:policy/AdministratorAccess" # or custom infra policy
   github_oidc_arn = "arn:aws:iam::${var.dev_account_id}:oidc-provider/token.actions.githubusercontent.com"
 }
