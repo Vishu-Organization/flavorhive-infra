@@ -2,26 +2,28 @@ resource "aws_iam_role" "this" {
   name = var.role_name
 
   assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Federated = var.github_oidc_arn
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::179323781176:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": [
+            "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main",
+            "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*"
+          ]
         },
-        Action = "sts:AssumeRoleWithWebIdentity",
-        Condition = {
-          StringLike = {
-            # Allow any ref coming from the repo (PR refs included); trust is limited by repo URL.
-            "token.actions.githubusercontent.com:sub" = var.github_sub
-          },
-          StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        }
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         }
       }
-    ]
-  })
+    }
+  ]
+})
 
   tags = {
     Environment = "FlavorHive"
