@@ -19,6 +19,11 @@ resource "aws_iam_role" "this" {
       }
     ]
   })
+
+  tags = {
+    Environment = "FlavorHive"
+    ManagedBy   = "Terraform"
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "attach" {

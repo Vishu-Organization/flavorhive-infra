@@ -1,5 +1,10 @@
 variable "role_name" {
-  description = "Name of the IAM role"
+  description = "Name of the IAM role to create"
+  type        = string
+}
+
+variable "policy_arn" {
+  description = "ARN of the policy to attach to this role"
   type        = string
 }
 
@@ -9,12 +14,6 @@ variable "github_oidc_arn" {
 }
 
 variable "github_sub" {
-  description = "OIDC subject pattern allowed to assume the role. e.g. repo:ORG/REPO:*"
-  type        = string
-}
-
-variable "policy_arn" {
-  description = "Policy ARN to attach to role (use a least-privilege policy in prod)"
-  type        = string
-  default     = "arn:aws:iam::aws:policy/AdministratorAccess"
+  description = "GitHub repo refs allowed to assume this role"
+  type        = list(string)
 }

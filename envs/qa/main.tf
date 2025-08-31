@@ -1,23 +1,30 @@
-# Pull global shared resources (ACM, KMS) from global stack
-data "terraform_remote_state" "global" {
-  backend = "s3"
-  config = {
-    bucket = "flavorhive-infra-terraform-state-global"
-    key    = "global/terraform.tfstate"
-    region = "ap-south-1"
-  }
+######################################
+# IAM Role for GitHub Actions (QA)
+######################################
+module "github_oidc_role" {
+  source    = "../../modules/iam-roles/github-oidc-role"
+  role_name = "FlavorHive-QA-Deploy-Role"
+
+  github_sub     = "repo:<YOUR_GITHUB_ORG>/<YOUR_REPO>:ref:refs/heads/release/*"
+  policy_arn     = "arn:aws:iam::aws:policy/AdministratorAccess" # or custom infra policy
+  github_oidc_arn = "arn:aws:iam::<QA_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
 }
 
+######################################
+# SPA Hosting
+######################################
 module "spa_hosting" {
   source      = "../../modules/s3-cloudfront-spa"
   bucket_name = "flavorhive-qa"
   env_name    = "QA"
 
-  # Use global resources
   acm_certificate_arn = data.terraform_remote_state.global.outputs.acm_certificate_arn
   kms_key_id          = data.terraform_remote_state.global.outputs.kms_key_id
 }
 
+######################################
+# Outputs
+######################################
 output "qa_bucket" {
   value = module.spa_hosting.bucket_name
 }
@@ -28,4 +35,8 @@ output "qa_cloudfront_url" {
 
 output "qa_cloudfront_log_bucket" {
   value = module.spa_hosting.cloudfront_log_bucket
+}
+
+output "qa_oidc_role_arn" {
+  value = module.github_oidc_role.role_arn
 }
