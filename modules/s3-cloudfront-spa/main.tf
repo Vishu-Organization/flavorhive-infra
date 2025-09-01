@@ -19,7 +19,7 @@ resource "aws_s3_bucket" "spa" {
     }
   }
 
-  # ✅ Lifecycle configuration (CKV2_AWS_61)
+  # ✅ Lifecycle configuration
   lifecycle_rule {
     id      = "expire-objects"
     enabled = true
@@ -33,6 +33,7 @@ resource "aws_s3_bucket" "spa" {
     }
   }
 
+  # ✅ SPA access logs go to the CloudFront logs bucket
   logging {
     target_bucket = aws_s3_bucket.cloudfront_logs.id
     target_prefix = "spa-access-logs/"
@@ -54,55 +55,16 @@ resource "aws_s3_bucket_public_access_block" "spa" {
   restrict_public_buckets = true
 }
 
-# ✅ Enforce HTTPS-only access
-resource "aws_s3_bucket_policy" "spa_enforce_ssl" {
-  bucket = aws_s3_bucket.spa.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Sid       = "EnforceSSL",
-        Effect    = "Deny",
-        Principal = "*",
-        Action    = "s3:*",
-        Resource = [
-          "${aws_s3_bucket.spa.arn}",
-          "${aws_s3_bucket.spa.arn}/*"
-        ],
-        Condition = {
-          Bool = { "aws:SecureTransport" = "false" }
-        }
-      },
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudfront.amazonaws.com"
-        },
-        Action   = "s3:GetObject",
-        Resource = "${aws_s3_bucket.spa.arn}/*",
-        Condition = {
-          StringEquals = {
-            "AWS:SourceArn" = aws_cloudfront_distribution.spa.arn
-          }
-        }
-      }
-    ]
-  })
-}
-
 ######################################
-# CloudFront Logging S3 Bucket
+# CloudFront Logs Bucket (Dedicated)
 ######################################
 resource "aws_s3_bucket" "cloudfront_logs" {
   bucket = "${var.bucket_name}-cf-logs"
 
-  # ✅ Versioning
   versioning {
     enabled = true
   }
 
-  # ✅ SSE with KMS
   server_side_encryption_configuration {
     rule {
       apply_server_side_encryption_by_default {
@@ -121,11 +83,8 @@ resource "aws_s3_bucket" "cloudfront_logs" {
     }
   }
 
-  # 🔹 Enable S3 access logging for this bucket itself
-  logging {
-    target_bucket = aws_s3_bucket.cloudfront_logs.id  # self-logging for QA/dev
-    target_prefix = "s3-access-logs/"
-  }
+  # ❌ Remove self-logging
+  # logging block removed
 
   tags = merge(var.tags, {
     Purpose = "CloudFrontLogs"
@@ -147,7 +106,6 @@ resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
   restrict_public_buckets = true
 }
 
-# ✅ Enforce HTTPS-only access for log bucket
 resource "aws_s3_bucket_policy" "cloudfront_logs_enforce_ssl" {
   bucket = aws_s3_bucket.cloudfront_logs.id
   policy = jsonencode({
@@ -159,7 +117,7 @@ resource "aws_s3_bucket_policy" "cloudfront_logs_enforce_ssl" {
         Principal = "*",
         Action    = "s3:*",
         Resource = [
-          "${aws_s3_bucket.cloudfront_logs.arn}",
+          aws_s3_bucket.cloudfront_logs.arn,
           "${aws_s3_bucket.cloudfront_logs.arn}/*"
         ],
         Condition = {
@@ -195,24 +153,23 @@ resource "aws_cloudfront_response_headers_policy" "spa_security" {
       override                   = true
     }
 
-    content_type_options {
+    content_type_options { 
       override = true
     }
 
-    xss_protection {
-      override           = true
-      mode_block         = true
-      protection_enabled = true
-    }
-
-    referrer_policy {
+    xss_protection { 
       override = true
-      policy   = "strict-origin-when-cross-origin"
+      protection = true
     }
-
-    frame_options {
+    
+    referrer_policy { 
+      override = true
+      referrer_policy = "strict-origin-when-cross-origin"
+    }
+    
+    frame_options { 
       frame_option = "DENY"
-      override     = true
+      override = true 
     }
   }
 
@@ -241,12 +198,9 @@ resource "aws_cloudfront_distribution" "spa" {
 
     forwarded_values {
       query_string = false
-      cookies {
-        forward = "none"
-      }
+      cookies { forward = "none" }
     }
 
-    # ✅ Attach response headers policy here
     response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
   }
 
@@ -258,12 +212,11 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   viewer_certificate {
-    acm_certificate_arn     = var.acm_certificate_arn
-    ssl_support_method      = "sni-only"
+    acm_certificate_arn      = var.acm_certificate_arn
+    ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
 
-  # ✅ Enable access logging
   logging_config {
     bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
     include_cookies = false

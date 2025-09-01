@@ -2,7 +2,7 @@
 # IAM Role for GitHub Actions (Dev)
 ######################################
 module "github_oidc_role" {
-  source    = "../../modules/iam-roles/github-oidc-role"
+  source    = "../../modules/iam-role"
   role_name = "FlavorHive-Dev-Deploy-Role"
 
   # GitHub repository URL in the "sub" claim
@@ -12,6 +12,7 @@ module "github_oidc_role" {
     ]
   policy_arn     = "arn:aws:iam::aws:policy/AdministratorAccess" # or custom infra policy
   github_oidc_arn = "arn:aws:iam::${var.dev_account_id}:oidc-provider/token.actions.githubusercontent.com"
+  dev_account_id  = var.dev_account_id   # Pass it down
 }
 
 ######################################

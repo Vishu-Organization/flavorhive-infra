@@ -19,4 +19,10 @@ variable "kms_key_id" {
   default     = ""  # empty means AWS-managed KMS key will be used
 }
 
+variable "tags" {
+  description = "Tags to attach to all resources"
+  type        = map(string)
+  default     = {}
+}
+
 
