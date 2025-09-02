@@ -47,6 +47,7 @@ jobs:
         run: terraform init -backend-config=../../backends/dev.hcl -reconfigure
 
       - name: Terraform Validate
+        working-directory: envs/dev
         run: terraform validate
 
       - name: Terraform Plan
