@@ -1,10 +1,10 @@
 name: "FlavorHive Infra Dev Deployment"
 
 on:
-  push:
+  pull_request:
     branches:
       - main
-  pull_request:
+  push:
     branches:
       - main
   workflow_dispatch:   # Allows manual trigger from Actions tab
@@ -22,17 +22,17 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
 
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout Repo
         uses: actions/checkout@v3
 
-      # 🔹 Debug OIDC token (optional, can be removed after verification)
+      # 2️⃣ Optional: Debug OIDC token
       - name: Decode OIDC token
         run: |
           echo $ACTIONS_ID_TOKEN_REQUEST_FILE
           cat $ACTIONS_ID_TOKEN_REQUEST_FILE | jq '.'
-     
 
-
+      # 3️⃣ Configure AWS credentials via OIDC
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -40,23 +40,28 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
           role-session-name: github-actions-dev
 
+      # 4️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.7.0
 
+      # 5️⃣ Terraform Init
       - name: Terraform Init
         working-directory: envs/dev
         run: terraform init -backend-config=../../backends/dev.hcl -reconfigure
 
+      # 6️⃣ Terraform Validate
       - name: Terraform Validate
         working-directory: envs/dev
         run: terraform validate
 
+      # 7️⃣ Terraform Plan (runs on PRs too)
       - name: Terraform Plan
         working-directory: envs/dev
         run: terraform plan -out=tfplan -var "dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}"
 
+      # 8️⃣ Terraform Apply (only on merge to main or manual)
       - name: Terraform Apply
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         working-directory: envs/dev
