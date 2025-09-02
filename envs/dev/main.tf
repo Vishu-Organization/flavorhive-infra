@@ -13,8 +13,8 @@ module "github_oidc_role" {
   role_name = "FlavorHive-Dev-Deploy-Role"
 
   github_sub = [
-    "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main",
-    "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
+    "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge",
+    "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/*"
   ]
 
   policy_arn      = "arn:aws:iam::aws:policy/AdministratorAccess"
