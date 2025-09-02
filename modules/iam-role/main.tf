@@ -2,40 +2,25 @@ resource "aws_iam_role" "this" {
   name = var.role_name
 
   assume_role_policy = jsonencode({
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::179323781176:oidc-provider/token.actions.githubusercontent.com"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Federated = var.github_oidc_arn
         },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main"
+        Action = "sts:AssumeRoleWithWebIdentity",
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          },
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = var.github_sub
+          }
         }
       }
-    },
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::179323781176:oidc-provider/token.actions.githubusercontent.com"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
-        }
-      }
-    }
-  ]
-})
+    ]
+  })
 
   tags = {
     Environment = "FlavorHive"

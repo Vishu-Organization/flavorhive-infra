@@ -8,8 +8,7 @@ module "github_oidc_role" {
 
   github_oidc_arn = "arn:aws:iam::${var.dev_account_id}:oidc-provider/token.actions.githubusercontent.com"
   github_sub      = [
-    "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main",
-    "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
+    "repo:Vishu-Organization/*"
   ]
   policy_arn      = "arn:aws:iam::aws:policy/AdministratorAccess"
   dev_account_id  = var.dev_account_id
