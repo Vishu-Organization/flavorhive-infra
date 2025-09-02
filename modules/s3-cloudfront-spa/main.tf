@@ -3,41 +3,46 @@
 ######################################
 resource "aws_s3_bucket" "spa" {
   bucket = var.bucket_name
+  tags   = merge(var.tags, { Purpose = "SPAHosting", Env = var.env_name })
+}
 
-  # ✅ Enable versioning
-  versioning {
-    enabled = true
+resource "aws_s3_bucket_versioning" "spa" {
+  bucket = aws_s3_bucket.spa.id
+  versioning_configuration {
+    status = "Enabled"
   }
+}
 
-  # ✅ Enable KMS encryption by default
-  server_side_encryption_configuration {
-    rule {
-      apply_server_side_encryption_by_default {
-        sse_algorithm     = "aws:kms"
-        kms_master_key_id = var.kms_key_id
-      }
+resource "aws_s3_bucket_server_side_encryption_configuration" "spa" {
+  bucket = aws_s3_bucket.spa.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = var.kms_key_id != "" ? "aws:kms" : "AES256"
+      kms_master_key_id = var.kms_key_id != "" ? var.kms_key_id : null
     }
   }
+}
 
-  # ✅ Lifecycle configuration
-  lifecycle_rule {
-    id      = "expire-objects"
-    enabled = true
+resource "aws_s3_bucket_lifecycle_configuration" "spa" {
+  bucket = aws_s3_bucket.spa.id
 
+  rule {
+    id     = "expire-objects"
+    status = "Enabled"
+    filter {} # required empty block if no prefix
     expiration {
-      days = 365
+      days = var.object_expiration_days
     }
-
     noncurrent_version_expiration {
-      days = 90
+      noncurrent_days = var.noncurrent_version_expiration_days
     }
   }
+}
 
-  # ✅ SPA access logs go to the CloudFront logs bucket
-  logging {
-    target_bucket = aws_s3_bucket.cloudfront_logs.id
-    target_prefix = "spa-access-logs/"
-  }
+resource "aws_s3_bucket_logging" "spa" {
+  bucket        = aws_s3_bucket.spa.id
+  target_bucket = aws_s3_bucket.cloudfront_logs.id
+  target_prefix = "spa-access-logs/"
 }
 
 resource "aws_s3_bucket_ownership_controls" "spa" {
@@ -55,40 +60,62 @@ resource "aws_s3_bucket_public_access_block" "spa" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_policy" "spa_enforce_ssl" {
+  bucket = aws_s3_bucket.spa.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EnforceSSL"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource = [
+        aws_s3_bucket.spa.arn,
+        "${aws_s3_bucket.spa.arn}/*"
+      ]
+      Condition = {
+        Bool = { "aws:SecureTransport" = "false" }
+      }
+    }]
+  })
+}
+
 ######################################
 # CloudFront Logs Bucket (Dedicated)
 ######################################
 resource "aws_s3_bucket" "cloudfront_logs" {
   bucket = "${var.bucket_name}-cf-logs"
+  tags   = merge(var.tags, { Purpose = "CloudFrontLogs", Env = var.env_name })
+}
 
-  versioning {
-    enabled = true
+resource "aws_s3_bucket_versioning" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  versioning_configuration {
+    status = "Enabled"
   }
+}
 
-  server_side_encryption_configuration {
-    rule {
-      apply_server_side_encryption_by_default {
-        sse_algorithm     = "aws:kms"
-        kms_master_key_id = var.kms_key_id
-      }
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = var.kms_key_id != "" ? "aws:kms" : "AES256"
+      kms_master_key_id = var.kms_key_id != "" ? var.kms_key_id : null
     }
   }
+}
 
-  # ✅ Lifecycle for log cleanup
-  lifecycle_rule {
-    id      = "expire-logs"
-    enabled = true
+resource "aws_s3_bucket_lifecycle_configuration" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    id     = "expire-logs"
+    status = "Enabled"
+    filter {} # required empty block if no prefix
     expiration {
       days = 90
     }
   }
-
-  # ❌ Remove self-logging
-  # logging block removed
-
-  tags = merge(var.tags, {
-    Purpose = "CloudFrontLogs"
-  })
 }
 
 resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
@@ -126,112 +153,4 @@ resource "aws_s3_bucket_policy" "cloudfront_logs_enforce_ssl" {
       }
     ]
   })
-}
-
-######################################
-# CloudFront Origin Access Control
-######################################
-resource "aws_cloudfront_origin_access_control" "spa" {
-  name                              = "${var.bucket_name}-oac"
-  description                       = "OAC for ${var.bucket_name}"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-######################################
-# CloudFront Response Headers Policy
-######################################
-resource "aws_cloudfront_response_headers_policy" "spa_security" {
-  name = "${var.env_name}-security-headers"
-
-  security_headers_config {
-    strict_transport_security {
-      access_control_max_age_sec = 63072000
-      include_subdomains         = true
-      preload                    = true
-      override                   = true
-    }
-
-    content_type_options { 
-      override = true
-    }
-
-    xss_protection { 
-      override = true
-      protection = true
-    }
-    
-    referrer_policy { 
-      override = true
-      referrer_policy = "strict-origin-when-cross-origin"
-    }
-    
-    frame_options { 
-      frame_option = "DENY"
-      override = true 
-    }
-  }
-
-  comment = "Security headers for ${var.env_name} SPA distribution"
-}
-
-######################################
-# CloudFront Distribution
-######################################
-resource "aws_cloudfront_distribution" "spa" {
-  enabled             = true
-  default_root_object = "index.html"
-  comment             = "${var.env_name} - FlavorHive Distribution"
-
-  origin {
-    domain_name              = aws_s3_bucket.spa.bucket_regional_domain_name
-    origin_id                = "s3-${var.bucket_name}"
-    origin_access_control_id = aws_cloudfront_origin_access_control.spa.id
-  }
-
-  default_cache_behavior {
-    target_origin_id       = "s3-${var.bucket_name}"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-
-    forwarded_values {
-      query_string = false
-      cookies { forward = "none" }
-    }
-
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.spa_security.id
-  }
-
-  restrictions {
-    geo_restriction {
-      restriction_type = "whitelist"
-      locations        = ["US", "IN", "EU"]
-    }
-  }
-
-  viewer_certificate {
-    acm_certificate_arn      = var.acm_certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
-  }
-
-  logging_config {
-    bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
-    include_cookies = false
-    prefix          = "cloudfront-logs/"
-  }
-
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
 }

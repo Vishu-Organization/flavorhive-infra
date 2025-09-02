@@ -14,7 +14,7 @@ resource "aws_iam_role" "this" {
         "StringLike": {
           "token.actions.githubusercontent.com:sub": [
             "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main",
-            "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*"
+            "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
           ]
         },
         "StringEquals": {

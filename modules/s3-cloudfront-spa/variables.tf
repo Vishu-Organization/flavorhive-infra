@@ -8,11 +8,6 @@ variable "env_name" {
   type        = string
 }
 
-variable "acm_certificate_arn" {
-  description = "ARN of the ACM certificate for CloudFront distribution (must be in us-east-1)"
-  type        = string
-}
-
 variable "kms_key_id" {
   description = "KMS Key ID or ARN to use for default encryption of the SPA bucket"
   type        = string
@@ -25,4 +20,26 @@ variable "tags" {
   default     = {}
 }
 
+variable "object_expiration_days" {
+  description = "Days before objects expire in SPA bucket"
+  type        = number
+  default     = 365
+}
 
+variable "noncurrent_version_expiration_days" {
+  description = "Days before noncurrent versions expire"
+  type        = number
+  default     = 90
+}
+
+variable "geo_restriction_enabled" {
+  description = "Enable geo restriction on CloudFront"
+  type        = bool
+  default     = false
+}
+
+variable "geo_locations" {
+  description = "List of allowed country codes if geo restriction is enabled"
+  type        = list(string)
+  default     = ["US", "IN", "EU"]
+}
