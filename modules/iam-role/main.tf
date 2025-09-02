@@ -13,7 +13,7 @@ resource "aws_iam_role" "this" {
       "Condition": {
         "StringLike": {
           "token.actions.githubusercontent.com:sub": [
-            "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/main",
+            "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/*",
             "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
           ]
         },

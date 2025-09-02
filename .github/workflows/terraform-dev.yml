@@ -35,7 +35,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.DEV_ACCOUNT_ID }}:role/FlavorHive-Dev-Deploy-Role
+          role-to-assume: arn:aws:iam::179323781176:role/FlavorHive-Dev-Deploy-Role
           aws-region: ${{ secrets.AWS_REGION }}
           role-session-name: github-actions-dev
 
