@@ -8,9 +8,3 @@ variable "aws_region" {
   type        = string
   default     = "ap-south-1"
 }
-
-variable "aws_profile" {
-  description = "AWS CLI profile name"
-  type        = string
-  default     = "flavorhive-admin"
-}

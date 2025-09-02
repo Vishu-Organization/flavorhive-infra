@@ -3,23 +3,31 @@ name: "FlavorHive Infra QA Deployment"
 on:
   pull_request:
     branches:
-      - main
-      - release/*       # Optional: PRs targeting release branches
-  workflow_dispatch:    # Optional manual trigger
+      - release/*    # PRs targeting release branches trigger QA deployment
+  workflow_dispatch:   # Allows manual trigger from Actions tab
 
 jobs:
   terraform:
     name: Terraform QA
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write
+      contents: read
+
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_FLAVORHIVE_INFRA_QA_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
 
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.QA_ACCOUNT_ID }}:role/FlavorHive-QA-Deploy-Role
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-session-name: github-actions-qa
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -33,9 +41,8 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan
+        run: terraform plan -out=tfplan -var "qa_account_id=${{ secrets.QA_ACCOUNT_ID }}"
 
       - name: Terraform Apply
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
-        run: terraform apply -auto-approve tfplan
-
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'workflow_dispatch'
+        run: terraform apply -var "qa_account_id=${{ secrets.QA_ACCOUNT_ID }}" -auto-approve tfplan
