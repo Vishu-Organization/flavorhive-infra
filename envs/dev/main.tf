@@ -1,30 +1,20 @@
-########################################
-# Providers
-########################################
 provider "aws" {
   region = "ap-south-1"
 }
 
-########################################
-# IAM Role for GitHub Actions (Dev)
-########################################
 module "github_oidc_role" {
   source    = "../../modules/iam-role"
   role_name = "FlavorHive-Dev-Deploy-Role"
 
-  github_sub = [
-    "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge",
-    "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/*"
-  ]
-
-  policy_arn      = "arn:aws:iam::aws:policy/AdministratorAccess"
   github_oidc_arn = "arn:aws:iam::${var.dev_account_id}:oidc-provider/token.actions.githubusercontent.com"
+  github_sub      = [
+    "repo:Vishu-Organization/flavorhive-infra:ref:refs/heads/*",
+    "repo:Vishu-Organization/flavorhive-infra:ref:refs/pull/*/merge"
+  ]
+  policy_arn      = "arn:aws:iam::aws:policy/AdministratorAccess"
   dev_account_id  = var.dev_account_id
 }
 
-########################################
-# Pull global shared resources (KMS)
-########################################
 data "terraform_remote_state" "global" {
   backend = "s3"
   config = {
@@ -35,22 +25,15 @@ data "terraform_remote_state" "global" {
   }
 }
 
-########################################
-# SPA Hosting (Dev Environment)
-########################################
 module "spa_hosting" {
   source = "../../modules/s3-cloudfront-spa"
   bucket_name = "flavorhive-dev"
   env_name    = "DEV"
 
-  # Pass tags and KMS
   tags       = { Environment = "DEV" }
   kms_key_id = data.terraform_remote_state.global.outputs.kms_key_id
 }
 
-########################################
-# Outputs
-########################################
 output "dev_bucket" {
   description = "S3 bucket name for Dev SPA hosting"
   value       = module.spa_hosting.bucket_name

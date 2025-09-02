@@ -2,18 +2,18 @@ resource "aws_iam_role" "this" {
   name = var.role_name
 
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
+    Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow"
+        Effect = "Allow",
         Principal = {
           Federated = var.github_oidc_arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
+        },
+        Action = "sts:AssumeRoleWithWebIdentity",
         Condition = {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
+          },
           StringLike = {
             "token.actions.githubusercontent.com:sub" = var.github_sub
           }
