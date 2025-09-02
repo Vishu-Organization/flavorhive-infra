@@ -60,4 +60,4 @@ jobs:
       - name: Terraform Apply
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         working-directory: envs/dev
-        run: terraform apply -var "dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}" -auto-approve tfplan
+        run: terraform apply -auto-approve tfplan
