@@ -20,7 +20,6 @@ data "terraform_remote_state" "global" {
     bucket = "flavorhive-infra-terraform-state-global"
     key    = "global/terraform.tfstate"
     region = "ap-south-1"
-    use_lockfile = true
   }
 }
 
