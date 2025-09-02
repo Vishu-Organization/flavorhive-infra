@@ -65,4 +65,4 @@ jobs:
       - name: Terraform Apply
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         working-directory: envs/dev
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply "tfplan"
