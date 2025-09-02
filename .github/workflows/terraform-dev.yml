@@ -49,6 +49,7 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
+        working-directory: envs/dev
         run: terraform plan -out=tfplan -var "dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}"
 
       - name: Terraform Apply
